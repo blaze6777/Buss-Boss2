@@ -1,0 +1,1432 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bus Boss – School Bus Management Sim</title>
+  <style>
+    :root { --text:#e8ecff; --muted:#aab3dd; --line:#26335f; --card:#111a33; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:linear-gradient(180deg,#070a14,#0b1020 35%,#070a14); color:var(--text); }
+    header{ padding:16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(7,10,20,.88); backdrop-filter:blur(8px); z-index:5; }
+    .wrap{ max-width:1100px; margin:0 auto; padding:12px 14px 40px; }
+    .topbar{ display:flex; gap:10px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
+    h1{ margin:0; font-size:18px; }
+    h3{ margin:0; font-size:16px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+    .mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    .grid{ display:grid; gap:14px; grid-template-columns:1fr; }
+    @media(min-width:980px){ .grid{ grid-template-columns:1.1fr .9fr; } }
+    .card{ background:rgba(17,26,51,.88); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+    .split{ display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
+    label{ display:block; font-size:12px; color:var(--muted); margin:0 0 4px 2px; }
+    input,select,textarea{
+      width:100%; padding:9px 10px; border-radius:10px; border:1px solid var(--line);
+      background:#0b1430; color:var(--text); outline:none;
+    }
+    button{
+      border:1px solid var(--line); background:#0c1a3d; color:var(--text);
+      border-radius:10px; padding:9px 10px; cursor:pointer;
+    }
+    button:hover{ filter:brightness(1.08); }
+    button.primary{ background:#1a2a70; border-color:#2e3fa1; }
+    button.danger{ background:#3a1230; border-color:#7a2d5a; }
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px; border-radius:999px; border:1px solid var(--line);
+      background:rgba(26,37,80,.55); font-size:12px;
+    }
+    .hr{ height:1px; background:var(--line); margin:10px 0; }
+    table{ width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border-radius:12px; border:1px solid var(--line); }
+    th,td{ padding:10px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th{ font-size:12px; color:var(--muted); background:rgba(11,20,48,.65); text-align:left; }
+    tr:last-child td{ border-bottom:none; }
+    .right{ text-align:right; }
+    .nowrap{ white-space:nowrap; }
+    .tag{ display:inline-block; padding:2px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; color:var(--muted); background:rgba(11,20,48,.5); margin-right:6px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>🚌 Bus Boss</h1>
+        <div class="small muted">Local-only sim (saves in your browser).</div>
+      </div>
+      <div class="row">
+        <span class="pill">💰 Budget: <span id="walletTop" class="mono"></span></span>
+        <span class="pill">🗓️ School Day: <span id="gameDateTop" class="mono"></span></span>
+        <span class="pill">📅 Game Year: <span id="gameYearTop" class="mono"></span></span>
+        <button class="primary" onclick="nextSchoolDay()">➡️ Next School Day</button>
+        <button onclick="backupData()">⬇️ Backup</button>
+        <button onclick="restoreData()">⬆️ Restore</button>
+        <button class="danger" onclick="resetAll()">Reset</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+
+    <!-- LEFT -->
+    <div class="card">
+      <div class="split">
+        <h3>📟 Dispatch View</h3>
+        <div class="row">
+          <span class="pill">Today: <span id="dispatchDate" class="mono"></span></span>
+          <div style="min-width:160px">
+            <label>Shift</label>
+            <select id="dispatchShift" onchange="renderAll()">
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+            </select>
+          </div>
+          <button class="primary" onclick="runAllScheduled()">▶️ Run All (Shift)</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="primary" onclick="startSchoolDay()">🌅 Start School Day</button>
+        <span class="pill">📣 PR: <span id="prMeter" class="mono"></span>/100</span>
+        <button onclick="viewComplaints()">📨 Complaints</button>
+        <button onclick="runSurpriseAudit()">🕵️ Surprise Audit</button>
+      </div>
+      <div id="opsBanner" class="small muted" style="margin-top:8px;"></div>
+
+      <div class="small muted" style="margin-top:8px;">
+        Uses your assigned route buses. If an assigned bus is <b>DOWN</b>, you must pick a <b>Sub Bus</b>.
+        Field trips are ad-hoc.
+      </div>
+
+      <div id="dispatchPanel" style="margin-top:10px;"></div>
+
+      <div class="hr"></div>
+
+      <div class="split">
+        <h3>🗺️ Route Assignments (Daily)</h3>
+        <div class="small muted">Stays assigned until you change it.</div>
+      </div>
+      <div id="routeAssignmentsPanel" style="margin-top:10px;"></div>
+
+      <div class="hr"></div>
+
+      <h3>➕ Create a Route</h3>
+      <div class="row" style="margin-top:10px;">
+        <div style="flex:1;min-width:220px">
+          <label>Route Name</label>
+          <input id="newRouteName" placeholder="e.g., Midday Preschool Shuttle" />
+        </div>
+        <div style="min-width:120px">
+          <label>Miles</label>
+          <input id="newRouteMiles" type="number" min="1" value="20" />
+        </div>
+        <div style="min-width:120px">
+          <label>Pay ($)</label>
+          <input id="newRoutePay" type="number" min="0" value="150" />
+        </div>
+        <div style="min-width:120px">
+          <label>Wear</label>
+          <input id="newRouteWear" type="number" step="0.1" min="0.5" max="3" value="1.2" />
+        </div>
+        <div style="min-width:120px">
+          <label>Risk</label>
+          <input id="newRouteRisk" type="number" step="0.1" min="0.5" max="3" value="1.2" />
+        </div>
+        <div style="min-width:170px">
+          <label>Type</label>
+          <select id="newRouteType">
+            <option value="daily">Daily (assign bus)</option>
+            <option value="adhoc">Ad-hoc (field trip style)</option>
+          </select>
+        </div>
+        <button class="primary" onclick="addCustomRoute()">Add Route</button>
+      </div>
+      <div id="customRoutesPanel" style="margin-top:10px;"></div>
+
+      <div class="hr"></div>
+
+      <h3>🗺️ Ad-hoc Route Runner</h3>
+      <div class="small muted" style="margin:6px 0 10px;">Field trips + ad-hoc custom routes.</div>
+      <div class="row">
+        <div style="flex:1;min-width:200px">
+          <label>Bus</label>
+          <select id="routeBus"></select>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <label>Driver</label>
+          <select id="routeDriver"></select>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <label>Route</label>
+          <select id="routeType"></select>
+        </div>
+        <button class="primary" onclick="runAdhocRoute()">Run Route</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>✅ Daily Bus Checks & Defects</h3>
+      <div class="row" style="margin-top:10px;">
+        <div style="flex:1;min-width:220px">
+          <label>Bus</label>
+          <select id="checkBus"></select>
+        </div>
+        <button class="primary" onclick="doPreTrip()">Pre-Trip</button>
+        <button onclick="doAllPreTrips()">✅ Pre-Trip ALL Buses</button>
+        <button onclick="doPostTrip()">Post-Trip (No Defect)</button>
+        <button class="danger" onclick="reportDefect()">🚨 Report Defect</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>🧾 Activity Log</h3>
+      <div class="small muted" style="margin:6px 0 10px;">Latest 25 entries.</div>
+      <div id="logPanel"></div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+
+      <div class="card">
+        <div class="split">
+          <h3>🚌 Fleet</h3>
+          <div class="row">
+            <button onclick="refreshLot()">🔄 Refresh Bus Lot</button>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div style="flex:1;min-width:200px">
+            <label>Add Bus Name</label>
+            <input id="busName" placeholder="e.g., Bus 12" />
+          </div>
+          <div style="min-width:160px">
+            <label>In-service year</label>
+            <input id="busYear" type="number" min="1980" max="2099" placeholder="e.g., 2012" />
+          </div>
+          <div style="flex:1;min-width:220px">
+            <label>Notes</label>
+            <input id="busNotes" placeholder="optional" />
+          </div>
+          <button class="primary" onclick="addBus()">Add Bus</button>
+        </div>
+
+        <div id="fleetPanel" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <div class="split">
+          <h3>🔧 Garage</h3>
+          <span class="pill">💰 Budget: <span id="walletGarage" class="mono"></span></span>
+        </div>
+        <div id="garagePanel" style="margin-top:10px;"></div>
+        <div class="small muted" style="margin-top:8px;">Repair clears DOWN status. Service boosts reliability. Upgrade reduces breakdown chance.</div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <div class="split">
+          <h3>🚌 Thomas Built Bus Lot</h3>
+          <div class="row">
+            <span class="pill">📅 Year: <span id="lotYear" class="mono"></span></span>
+            <button onclick="advanceYear()">➡️ Next Year</button>
+            <button onclick="refreshLot()">🔄 Refresh Lot</button>
+          </div>
+        </div>
+        <div id="busLotPanel" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <div class="split">
+          <h3>👩‍✈️ Drivers</h3>
+          <div class="row">
+            <button onclick="openHiringPool()">🎤 Hiring Pool</button>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div style="flex:1;min-width:220px">
+            <label>Add Driver Name</label>
+            <input id="driverName" placeholder="e.g., Sam Carter" />
+          </div>
+          <div style="min-width:160px">
+            <label>Started driving (year)</label>
+            <input id="driverYear" type="number" min="1980" max="2099" placeholder="e.g., 2016" />
+          </div>
+          <button class="primary" onclick="addDriver()">Add Driver</button>
+        </div>
+
+        <div id="driversPanel" style="margin-top:12px;"></div>
+        <div id="hiringPanel" style="margin-top:10px;"></div>
+
+        <div class="small muted" style="margin-top:8px;">
+          Drivers can retire over time. Traits affect wear/breakdowns a bit.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========= helpers + storage ========= */
+const KEY = "busboss_v2";
+const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
+const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const randInt = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+function load(){ try{ const r=localStorage.getItem(KEY); return r?JSON.parse(r):null; }catch{ return null; } }
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function byId(arr,id){ return (arr||[]).find(x=>x.id===id); }
+function getShift(){ return document.getElementById("dispatchShift")?.value || "morning"; }
+function dispatchKey(){ return state.gameDate; }
+
+/* ========= game data ========= */
+const BASE_ROUTES = [
+  { id:"neighborhood", name:"Neighborhood Route", miles:18, pay:120, wear:1.0, risk:1.0, isAdhoc:false },
+  { id:"rural",        name:"Rural Route",        miles:42, pay:220, wear:1.4, risk:1.3, isAdhoc:false },
+  { id:"special",      name:"Special Ed Route",   miles:22, pay:180, wear:1.6, risk:1.4, isAdhoc:false },
+  { id:"midday_k",     name:"Midday Kindergarten Shuttle", miles:10, pay:80,  wear:0.9, risk:0.9, isAdhoc:false },
+  { id:"vo_tech",      name:"Vo-Tech / Career Center",     miles:34, pay:210, wear:1.3, risk:1.2, isAdhoc:false },
+  { id:"late_run",     name:"Late Bus (After-School)",     miles:26, pay:170, wear:1.2, risk:1.2, isAdhoc:false },
+
+  { id:"field",        name:"Field Trip",        miles:85, pay:420, wear:1.8, risk:1.6, isAdhoc:true },
+  { id:"sports",       name:"Sports Away Game",  miles:60, pay:320, wear:1.6, risk:1.5, isAdhoc:true },
+];
+
+const SHIFT_RULES = {
+  morning:   { payMult:1.00, wearMult:1.00 },
+  afternoon: { payMult:0.95, wearMult:1.05 }
+};
+
+const TRAITS = [
+  { id:"safe", name:"Safety First",     wearMult:0.95, breakMult:0.90 },
+  { id:"gentle", name:"Gentle",         wearMult:0.90, breakMult:0.92 },
+  { id:"efficient", name:"Efficient",   wearMult:0.98, breakMult:0.97 },
+  { id:"steady", name:"Steady",         wearMult:1.00, breakMult:1.00 },
+  { id:"rookie", name:"Rookie",         wearMult:1.05, breakMult:1.12 },
+  { id:"rough", name:"Heavy Foot",      wearMult:1.12, breakMult:1.10 },
+];
+function traitById(id){ return TRAITS.find(t=>t.id===id) || TRAITS[3]; }
+
+/* ========= state ========= */
+const state = load() || {
+  wallet: 5000,
+  gameYear: new Date().getFullYear(),
+  gameDate: todayISO(),
+
+  buses: [],
+  drivers: [],
+  logs: [],
+
+  // routes
+  customRoutes: [],
+  routeAssignments: {},         // { routeId: busId }
+
+  // dispatch drivers per day+shift
+  dispatch: {},                 // { dateKey: { morning:{routeId:{driverId}}, afternoon:{...} } }
+
+  // realism ops
+  ops: {
+    dayStartedKey: null,
+    absentDrivers: [],
+    lateDrivers: [],
+    prScore: 70,
+    complaints: {}, // { dayKey: [ {type,msg,createdAt} ] }
+    audits: {}      // { dayKey: {score,notes,createdAt} }
+  },
+  busDayFlags: {} // { dayKey: { busId: {am,pm} } }
+
+  // bus lot
+  lotInventory: [],
+};
+
+/* ========= normalization ========= */
+function allRoutes(){ return [...BASE_ROUTES, ...(state.customRoutes||[])]; }
+function dailyRoutes(){ return allRoutes().filter(r=>!r.isAdhoc); }
+function adhocRoutes(){ return allRoutes().filter(r=>r.isAdhoc); }
+
+function normalize(){
+  if(!state.gameDate) state.gameDate = todayISO();
+  if(!Array.isArray(state.buses)) state.buses=[];
+  if(!Array.isArray(state.drivers)) state.drivers=[];
+  if(!Array.isArray(state.logs)) state.logs=[];
+  if(!Array.isArray(state.customRoutes)) state.customRoutes=[];
+  if(!state.routeAssignments) state.routeAssignments={};
+  if(!state.dispatch) state.dispatch={};
+  if(!state.ops) state.ops={ dayStartedKey:null, absentDrivers:[], lateDrivers:[], prScore:70, complaints:{}, audits:{} };
+  if(!state.ops.complaints) state.ops.complaints={};
+  if(!state.ops.audits) state.ops.audits={};
+  if(!Array.isArray(state.ops.absentDrivers)) state.ops.absentDrivers=[];
+  if(!Array.isArray(state.ops.lateDrivers)) state.ops.lateDrivers=[];
+  if(typeof state.ops.prScore!=="number") state.ops.prScore=70;
+  if(!state.busDayFlags) state.busDayFlags={};
+  if(!Array.isArray(state.lotInventory)) state.lotInventory=[];
+
+  // ensure base daily routes have assignment slots
+  dailyRoutes().forEach(r=>{
+    if(!(r.id in state.routeAssignments)) state.routeAssignments[r.id] = "";
+  });
+
+  // bus defaults
+  state.buses.forEach(b=>{
+    if(!b.id) b.id=uid();
+    if(!("status" in b)) b.status="active"; // active|down
+    if(!("inServiceYear" in b)) b.inServiceYear = state.gameYear;
+    if(!("odometer" in b)) b.odometer = 0;
+    if(!("condition" in b)) b.condition = 70; // 0-100
+    if(!("reliabilityMod" in b)) b.reliabilityMod = 0; // 0..0.25
+    if(!("serviceBoost" in b)) b.serviceBoost = 0; // 0..30
+    if(!("notes" in b)) b.notes="";
+    if(!("maintenanceNote" in b)) b.maintenanceNote="";
+    if(!("subBusId" in b)) b.subBusId=null;
+    if(!("lastPreTripDate" in b)) b.lastPreTripDate=null;
+    if(!("lastPostTripDate" in b)) b.lastPostTripDate=null;
+    if(!("preTripStreak" in b)) b.preTripStreak=0;
+    if(!("defect" in b)) b.defect=null; // {level,note,date}
+  });
+
+  // driver defaults
+  state.drivers.forEach(d=>{
+    if(!d.id) d.id=uid();
+    if(!("status" in d)) d.status="available"; // available|vacation|sick
+    if(!("hiredYear" in d)) d.hiredYear=state.gameYear;
+    if(!("trait" in d)) d.trait=pick(TRAITS);
+    if(!("isRetired" in d)) d.isRetired=false;
+    if(!("retiredYear" in d)) d.retiredYear=null;
+  });
+
+  if(!state.lotInventory.length) generateLotForYear(state.gameYear);
+}
+normalize();
+save();
+
+/* ========= in-game day ========= */
+function nextSchoolDay(){
+  let d = new Date(state.gameDate + "T00:00:00");
+  do { d.setDate(d.getDate()+1); } while(d.getDay()===0 || d.getDay()===6);
+  state.gameDate = d.toISOString().slice(0,10);
+  ensureDispatchDay();
+  state.ops.dayStartedKey = null;
+  save(); renderAll();
+}
+
+/* ========= dispatch structures ========= */
+function ensureDispatchDay(){
+  const key = dispatchKey();
+  if(!state.dispatch[key]) state.dispatch[key] = { morning:{}, afternoon:{} };
+  ["morning","afternoon"].forEach(shift=>{
+    dailyRoutes().forEach(r=>{
+      if(!state.dispatch[key][shift][r.id]) state.dispatch[key][shift][r.id] = { driverId:"" };
+    });
+  });
+}
+function getDispatchDriver(routeId){
+  ensureDispatchDay();
+  return state.dispatch[dispatchKey()][getShift()][routeId]?.driverId || "";
+}
+function setDispatchDriver(routeId, driverId){
+  ensureDispatchDay();
+  state.dispatch[dispatchKey()][getShift()][routeId].driverId = driverId || "";
+  save(); renderAll();
+}
+
+/* ========= ops realism ========= */
+function ensureOpsForDay(dayKey){
+  if(!state.ops.complaints[dayKey]) state.ops.complaints[dayKey]=[];
+  if(!state.busDayFlags[dayKey]) state.busDayFlags[dayKey]={};
+}
+function opsBannerText(dayKey){
+  const started = state.ops.dayStartedKey===dayKey ? "✅ Started" : "⏳ Not started";
+  return `${started} • Absences: ${state.ops.absentDrivers.length} • Late: ${state.ops.lateDrivers.length}`;
+}
+function startSchoolDay(){
+  const dayKey = dispatchKey();
+  ensureOpsForDay(dayKey);
+  if(state.ops.dayStartedKey===dayKey) return alert("School day already started.");
+
+  state.ops.absentDrivers=[];
+  state.ops.lateDrivers=[];
+
+  const absentRate=0.07, lateRate=0.10;
+  state.drivers.forEach(d=>{
+    if(d.isRetired) return;
+    if(d.status!=="available") return;
+    if(Math.random()<absentRate){ d.status="sick"; state.ops.absentDrivers.push(d.id); }
+    else if(Math.random()<lateRate){ state.ops.lateDrivers.push(d.id); }
+  });
+
+  state.ops.dayStartedKey=dayKey;
+  state.ops.prScore = clamp(state.ops.prScore + randInt(-2,2), 0, 100);
+
+  // occasional auto audit
+  if(Math.random()<0.12) autoAudit(dayKey,true);
+
+  log(`🌅 School day started • Call-offs: ${state.ops.absentDrivers.length} • Late: ${state.ops.lateDrivers.length}`);
+  save(); renderAll();
+}
+function addComplaint(type,msg){
+  const dayKey=dispatchKey();
+  ensureOpsForDay(dayKey);
+  state.ops.complaints[dayKey].push({type,msg,createdAt:Date.now()});
+
+  const impact = type==="Late" ? -3 :
+                 type==="Dirty Bus" ? -4 :
+                 type==="Rough Ride" ? -2 :
+                 type==="No-Show" ? -8 :
+                 type==="Audit" ? -2 : -1;
+
+  state.ops.prScore = clamp(state.ops.prScore + impact, 0, 100);
+  if(type==="No-Show" || type==="Dirty Bus") log(`📨 Complaint: ${type} — ${msg}`);
+}
+function viewComplaints(){
+  const dayKey=dispatchKey();
+  ensureOpsForDay(dayKey);
+  const list=state.ops.complaints[dayKey];
+  if(!list.length) return alert(`No complaints for ${dayKey} 🎉`);
+  const text=list.slice(-20).map((c,i)=>`${i+1}) ${c.type}: ${c.msg}`).join("\n");
+  alert(`📨 Complaints (${dayKey})\n\n${text}`);
+}
+function runSurpriseAudit(){ autoAudit(dispatchKey(),false); save(); renderAll(); }
+function autoAudit(dayKey,wasAuto){
+  ensureOpsForDay(dayKey);
+
+  const buses=state.buses;
+  const active=buses.filter(b=>b.status==="active");
+  const preTripDone=active.filter(b=>b.lastPreTripDate===dayKey).length;
+  const pct=active.length? preTripDone/active.length : 1;
+
+  const majorDefects=buses.filter(b=>b.defect && b.defect.level==="major").length;
+  const down=buses.filter(b=>b.status==="down").length;
+
+  let score=100;
+  score -= Math.round((1-pct)*40);
+  score -= majorDefects*8;
+  score -= down*4;
+  score = clamp(score,0,100);
+
+  const notes=[];
+  notes.push(`Pre-Trip completion: ${Math.round(pct*100)}%`);
+  if(majorDefects) notes.push(`Major defects open: ${majorDefects}`);
+  if(down) notes.push(`Buses DOWN: ${down}`);
+
+  state.ops.audits[dayKey]={score,notes,createdAt:Date.now()};
+
+  if(score>=90){
+    state.ops.prScore = clamp(state.ops.prScore+2,0,100);
+    alert(`${wasAuto ? "🕵️ Surprise Audit (auto)" : "🕵️ Surprise Audit"}: ${score}/100\n\n${notes.join("\n")}`);
+    return;
+  }
+  if(score<70){
+    const penalty=150;
+    state.wallet=Math.max(0,state.wallet-penalty);
+    addComplaint("Audit", `Audit score ${score}. Office got heat from the board.`);
+    alert(`🕵️ Audit Result: ${score}/100\n-${penalty} budget (training / corrective action)\n\n${notes.join("\n")}`);
+    return;
+  }
+  alert(`${wasAuto ? "🕵️ Surprise Audit (auto)" : "🕵️ Surprise Audit"}: ${score}/100\n\n${notes.join("\n")}`);
+}
+function ensureBusFlags(dayKey,busId){
+  ensureOpsForDay(dayKey);
+  if(!state.busDayFlags[dayKey][busId]) state.busDayFlags[dayKey][busId]={am:false,pm:false};
+  return state.busDayFlags[dayKey][busId];
+}
+function applyDeadheadIfNeeded(bus,shift){
+  const dayKey=dispatchKey();
+  const flags=ensureBusFlags(dayKey,bus.id);
+  const deadheadMiles=3, wear=0.8;
+
+  if(shift==="morning" && !flags.am){
+    flags.am=true;
+    bus.odometer += deadheadMiles;
+    bus.condition = Math.max(0, Number(bus.condition||70)-wear);
+    log(`🚐 Deadhead (AM) ${bus.name}: +${deadheadMiles} miles`);
+  }
+  if(shift==="afternoon" && !flags.pm){
+    flags.pm=true;
+    bus.odometer += deadheadMiles;
+    bus.condition = Math.max(0, Number(bus.condition||70)-wear);
+    log(`🚐 Deadhead (PM) ${bus.name}: +${deadheadMiles} miles`);
+  }
+}
+function maybeComplaint(bus,driver,usedSub,skippedPreTrip){
+  const cond=Number(bus.condition||70);
+  let pLate=0.04, pDirty=0.03, pRough=0.02;
+
+  if(usedSub) pLate += 0.06;
+  if(skippedPreTrip) pLate += 0.03;
+  if(state.ops.lateDrivers.includes(driver.id)) pLate += 0.10;
+
+  if(cond<55) pDirty += 0.06;
+  if(cond<40) pDirty += 0.10;
+  if(cond<50) pRough += 0.05;
+
+  if(Math.random()<pLate) addComplaint("Late", `${driver.name} ran late due to congestion / loading time.`);
+  if(Math.random()<pDirty) addComplaint("Dirty Bus", `Parents complained bus looked messy or smelled off.`);
+  if(Math.random()<pRough) addComplaint("Rough Ride", `Rough ride / hard stops report came in.`);
+}
+
+/* ========= buses + drivers ========= */
+function busAge(bus){ return Math.max(0, state.gameYear - Number(bus.inServiceYear||state.gameYear)); }
+function addBus(){
+  const name=document.getElementById("busName").value.trim();
+  const year=Number(document.getElementById("busYear").value)||state.gameYear;
+  const notes=document.getElementById("busNotes").value.trim();
+  if(!name) return alert("Enter a bus name.");
+
+  state.buses.push({
+    id:uid(), name, notes,
+    status:"active", maintenanceNote:"", subBusId:null,
+    inServiceYear:year, odometer:0,
+    condition:70, reliabilityMod:0, serviceBoost:0,
+    lastPreTripDate:null, lastPostTripDate:null, preTripStreak:0,
+    defect:null
+  });
+
+  document.getElementById("busName").value="";
+  document.getElementById("busYear").value="";
+  document.getElementById("busNotes").value="";
+  save(); renderAll();
+}
+function addDriver(){
+  const name=document.getElementById("driverName").value.trim();
+  const year=Number(document.getElementById("driverYear").value)||state.gameYear;
+  if(!name) return alert("Enter a driver name.");
+
+  state.drivers.push({
+    id:uid(),
+    name,
+    hiredYear:year,
+    trait: pick(TRAITS),
+    status:"available",
+    isRetired:false,
+    retiredYear:null
+  });
+
+  document.getElementById("driverName").value="";
+  document.getElementById("driverYear").value="";
+  save(); renderAll();
+}
+function driverExp(d){ return Math.max(0, state.gameYear - Number(d.hiredYear||state.gameYear)); }
+function maybeRetireDrivers(){
+  // each new YEAR, some older drivers retire
+  state.drivers.forEach(d=>{
+    if(d.isRetired) return;
+    const yrs=driverExp(d);
+    if(yrs>=25){
+      d.isRetired=true; d.retiredYear=state.gameYear; d.status="vacation";
+      log(`🎉 Driver retired: ${d.name} (25+ years)`);
+      return;
+    }
+    if(yrs>=20){
+      const chance=Math.min(0.25, 0.05 + (yrs-20)*0.03);
+      if(Math.random()<chance){
+        d.isRetired=true; d.retiredYear=state.gameYear; d.status="vacation";
+        log(`🎉 Driver retired: ${d.name} (chose to retire)`);
+      }
+    }
+  });
+}
+function setDriverStatus(id,status){
+  const d=byId(state.drivers,id);
+  if(!d || d.isRetired) return;
+  d.status=status;
+  save(); renderAll();
+}
+
+/* ========= pre/post/defects ========= */
+function doPreTrip(){
+  const busId=document.getElementById("checkBus").value;
+  const bus=byId(state.buses,busId); if(!bus) return;
+  const t=dispatchKey();
+  bus.lastPreTripDate=t;
+  bus.preTripStreak=(bus.preTripStreak||0)+1;
+  bus.condition=Math.min(100,Number(bus.condition||70)+0.5);
+  log(`✅ Pre-Trip completed: ${bus.name}`);
+  save(); renderAll();
+}
+function doAllPreTrips(){
+  const t=dispatchKey();
+  const active=state.buses.filter(b=>b.status==="active");
+  if(!active.length) return alert("No active buses.");
+  const toUpdate=active.filter(b=>b.lastPreTripDate!==t);
+  if(!toUpdate.length) return alert("All active buses already pre-tripped today.");
+  if(!confirm(`Complete Pre-Trip for ${toUpdate.length} active bus(es) for ${t}?`)) return;
+
+  toUpdate.forEach(b=>{
+    b.lastPreTripDate=t;
+    b.preTripStreak=(b.preTripStreak||0)+1;
+    b.condition=Math.min(100,Number(b.condition||70)+0.5);
+  });
+  log(`✅ Bulk Pre-Trip completed for ${toUpdate.length} bus(es)`);
+  save(); renderAll();
+}
+function doPostTrip(){
+  const busId=document.getElementById("checkBus").value;
+  const bus=byId(state.buses,busId); if(!bus) return;
+  bus.lastPostTripDate=dispatchKey();
+  bus.condition=Math.min(100,Number(bus.condition||70)+0.3);
+  log(`✅ Post-Trip completed: ${bus.name}`);
+  save(); renderAll();
+}
+function reportDefect(){
+  const busId=document.getElementById("checkBus").value;
+  const bus=byId(state.buses,busId); if(!bus) return;
+  const note=prompt("Describe the defect:"); if(!note) return;
+  const major=confirm("Is this a MAJOR defect?\nOK = Major (bus OUT OF SERVICE)\nCancel = Minor");
+  const t=dispatchKey();
+  bus.defect={ level: major?"major":"minor", note, date:t };
+  bus.lastPostTripDate=t;
+  if(major){ bus.status="down"; bus.maintenanceNote="Reported defect"; }
+  log(`🚨 Defect (${major?"MAJOR":"minor"}): ${bus.name} — ${note}`);
+  save(); renderAll();
+}
+
+/* ========= breakdowns / wear / pay ========= */
+function maybeAutoBreak(bus, route, driver, skippedPreTrip){
+  if(bus.status!=="active") return;
+
+  const age=busAge(bus);
+  const odo=Number(bus.odometer||0);
+  const condition=clamp(Number(bus.condition||70),0,100);
+  const reliability=clamp(Number(bus.reliabilityMod||0),0,0.25);
+  const serviceBoost=clamp(Number(bus.serviceBoost||0),0,30);
+
+  // base chance grows with age/odo
+  let chance=0.02 + age*0.009 + (odo/50000)*0.03;
+  chance *= (route.risk||1.0);
+  chance *= (1.15 - (condition/100)*0.45);
+  chance *= (1 - reliability);
+  chance *= (1 - serviceBoost/100);
+  chance *= (driver?.trait?.breakMult || 1.0);
+  if(bus.defect) chance *= (bus.defect.level==="major" ? 2.0 : 1.25);
+  if(skippedPreTrip) chance *= 1.25;
+
+  chance = Math.min(chance, 0.22);
+
+  // decay service boost a bit each run
+  bus.serviceBoost = Math.max(0, serviceBoost-2);
+
+  if(Math.random()>chance) return;
+
+  // breakdown event
+  const events=[
+    "Oil leak suspected",
+    "Cooling system acting up",
+    "Electrical gremlin",
+    "Transmission slipping",
+    "Brake warning light"
+  ];
+  bus.status="down";
+  bus.maintenanceNote=pick(events);
+  log(`🚧 Breakdown: ${bus.name} — ${bus.maintenanceNote}`);
+}
+
+/* ========= routes: assignments + subs ========= */
+function setAssignedBus(routeId,busId){
+  state.routeAssignments[routeId]=busId||"";
+  save(); renderAll();
+}
+function pickSubBus(excludeBusId){
+  const options=state.buses.filter(b=>b.status==="active" && b.id!==excludeBusId);
+  if(!options.length) return null;
+  const list=options.map((b,i)=>`${i+1}) ${b.name}`).join("\n");
+  const choice=prompt(`Assigned bus is DOWN.\nPick a Sub Bus:\n\n${list}\n\nEnter number:`)
+  const idx=Number(choice)-1;
+  if(!Number.isFinite(idx) || idx<0 || idx>=options.length) return null;
+  return options[idx];
+}
+
+/* ========= run scheduled routes ========= */
+function runScheduledRoute(routeId){
+  const route=dailyRoutes().find(r=>r.id===routeId);
+  if(!route) return;
+
+  const assignedBusId=state.routeAssignments[routeId] || "";
+  if(!assignedBusId){
+    addComplaint("No-Show", `${route.name} had no bus assigned.`);
+    return alert(`No bus assigned for ${route.name}.`);
+  }
+  const busAssigned=byId(state.buses,assignedBusId);
+  if(!busAssigned){
+    addComplaint("No-Show", `${route.name} assigned bus missing.`);
+    return alert(`Assigned bus missing for ${route.name}.`);
+  }
+
+  const driverId=getDispatchDriver(routeId);
+  if(!driverId){
+    addComplaint("No-Show", `${route.name} had no driver assigned for this shift.`);
+    save(); renderAll();
+    return alert(`🚫 NO DRIVER ASSIGNED\n${route.name}\n(Complaint added)`);
+  }
+  const driver=byId(state.drivers,driverId);
+  if(!driver || driver.isRetired){
+    addComplaint("No-Show", `${route.name} driver missing/retired.`);
+    save(); renderAll();
+    return alert(`Driver missing/retired for ${route.name}.`);
+  }
+  if(driver.status!=="available"){
+    addComplaint("No-Show", `${driver.name} unavailable (${driver.status}) for ${route.name}.`);
+    save(); renderAll();
+    return alert(`Driver unavailable: ${driver.name} (${driver.status})`);
+  }
+
+  const shift=getShift();
+  const rules=SHIFT_RULES[shift] || SHIFT_RULES.morning;
+
+  // choose bus (sub if down)
+  let busToUse=busAssigned;
+  let usedSub=false;
+  if(busAssigned.status==="down"){
+    const sub=pickSubBus(busAssigned.id);
+    if(!sub){
+      addComplaint("No-Show", `${route.name} bus was DOWN and no sub bus selected.`);
+      save(); renderAll();
+      return alert(`Assigned bus DOWN. No sub selected.`);
+    }
+    busAssigned.subBusId=sub.id;
+    busToUse=sub;
+    usedSub=true;
+  }
+
+  const t=dispatchKey();
+  const skippedPreTrip = (busToUse.lastPreTripDate !== t);
+
+  if(skippedPreTrip){
+    if(!confirm(`⚠️ Pre-Trip not completed for ${busToUse.name} today.\nRun anyway? (Higher risk)`)) return;
+  }
+
+  applyDeadheadIfNeeded(busToUse, shift);
+
+  // miles, wear, pay
+  busToUse.odometer += route.miles;
+
+  let wear = route.wear * rules.wearMult;
+  wear *= (driver.trait?.wearMult || 1.0);
+  if(skippedPreTrip) wear *= 1.15;
+  if(busToUse.defect) wear *= (busToUse.defect.level==="major" ? 1.25 : 1.10);
+  busToUse.condition = Math.max(0, Number(busToUse.condition||70) - wear);
+
+  const pay = Math.round(route.pay * rules.payMult);
+  state.wallet += pay;
+
+  log(`🚌 ${route.name} (${shift.toUpperCase()}) — Bus: ${busToUse.name}${usedSub?" (SUB)":""} • Driver: ${driver.name} • +$${pay}`);
+
+  // breakdown + complaints
+  maybeAutoBreak(busToUse, route, driver, skippedPreTrip);
+  maybeComplaint(busToUse, driver, usedSub, skippedPreTrip);
+
+  save(); renderAll();
+}
+function runAllScheduled(){
+  // runs all daily routes for current shift
+  const list=dailyRoutes();
+  if(!list.length) return alert("No daily routes.");
+  for(const r of list){
+    // don't halt whole run on one error; try/catch and continue
+    try{ runScheduledRoute(r.id); }catch(e){ console.error(e); }
+  }
+}
+
+/* ========= ad-hoc route runner ========= */
+function runAdhocRoute(){
+  const busId=document.getElementById("routeBus").value;
+  const driverId=document.getElementById("routeDriver").value;
+  const routeId=document.getElementById("routeType").value;
+
+  const bus=byId(state.buses,busId);
+  const driver=byId(state.drivers,driverId);
+  const route=adhocRoutes().find(r=>r.id===routeId);
+  if(!bus || !driver || !route) return alert("Pick bus, driver, and an ad-hoc route.");
+  if(bus.status==="down") return alert("Bus is DOWN.");
+  if(driver.isRetired) return alert("Driver is retired.");
+  if(driver.status!=="available") return alert(`Driver unavailable (${driver.status}).`);
+
+  const shift=getShift();
+  const rules=SHIFT_RULES[shift] || SHIFT_RULES.morning;
+
+  const t=dispatchKey();
+  const skippedPreTrip = (bus.lastPreTripDate !== t);
+  if(skippedPreTrip){
+    if(!confirm(`⚠️ Pre-Trip not completed for ${bus.name} today.\nRun anyway? (Higher risk)`)) return;
+  }
+
+  applyDeadheadIfNeeded(bus, shift);
+
+  bus.odometer += route.miles;
+
+  let wear = route.wear * 1.2 * rules.wearMult;
+  wear *= (driver.trait?.wearMult || 1.0);
+  if(skippedPreTrip) wear *= 1.15;
+  if(bus.defect) wear *= (bus.defect.level==="major" ? 1.25 : 1.10);
+  bus.condition = Math.max(0, Number(bus.condition||70) - wear);
+
+  const pay = Math.round(route.pay * rules.payMult);
+  state.wallet += pay;
+
+  log(`🗺️ ${route.name} (AD-HOC ${shift.toUpperCase()}) — ${bus.name} • ${driver.name} • +$${pay}`);
+
+  maybeAutoBreak(bus, route, driver, skippedPreTrip);
+  maybeComplaint(bus, driver, false, skippedPreTrip);
+
+  save(); renderAll();
+}
+
+/* ========= custom routes ========= */
+function addCustomRoute(){
+  const name=document.getElementById("newRouteName").value.trim();
+  const miles=Number(document.getElementById("newRouteMiles").value);
+  const pay=Number(document.getElementById("newRoutePay").value);
+  const wear=Number(document.getElementById("newRouteWear").value);
+  const risk=Number(document.getElementById("newRouteRisk").value);
+  const type=document.getElementById("newRouteType").value;
+
+  if(!name) return alert("Enter a route name.");
+  if(!(miles>0) || !(wear>0) || !(risk>0)) return alert("Miles/Wear/Risk must be > 0.");
+
+  const id="c_"+uid().slice(0,8);
+  state.customRoutes.push({ id, name, miles:Math.round(miles), pay:Math.round(pay), wear:+wear.toFixed(2), risk:+risk.toFixed(2), isAdhoc:(type==="adhoc") });
+
+  if(type==="daily") state.routeAssignments[id]=state.routeAssignments[id]||"";
+
+  document.getElementById("newRouteName").value="";
+  save(); renderAll();
+}
+function deleteCustomRoute(routeId){
+  if(!confirm("Delete this route?")) return;
+  state.customRoutes = (state.customRoutes||[]).filter(r=>r.id!==routeId);
+  if(routeId in state.routeAssignments) delete state.routeAssignments[routeId];
+  Object.keys(state.dispatch||{}).forEach(day=>{
+    ["morning","afternoon"].forEach(shift=>{
+      if(state.dispatch[day]?.[shift]?.[routeId]) delete state.dispatch[day][shift][routeId];
+    });
+  });
+  save(); renderAll();
+}
+
+/* ========= garage ========= */
+function repairCost(bus){
+  const age=busAge(bus), odo=Number(bus.odometer||0);
+  const base=200 + age*35 + (odo/10000)*60;
+  const downPenalty = bus.status==="down" ? 200 : 0;
+  return Math.round(base+downPenalty);
+}
+function serviceCost(bus){
+  const age=busAge(bus);
+  return Math.round(120 + age*15);
+}
+function upgradeCost(bus){
+  const age=busAge(bus);
+  return Math.round(600 + age*80);
+}
+function doRepair(busId){
+  const bus=byId(state.buses,busId); if(!bus) return;
+  const cost=repairCost(bus);
+  if(state.wallet<cost) return alert("Not enough budget.");
+  state.wallet -= cost;
+  bus.status="active";
+  bus.maintenanceNote="";
+  bus.subBusId=null;
+  bus.defect=null;
+  bus.condition = Math.min(100, Number(bus.condition||70)+20);
+  log(`🔧 Repair: ${bus.name} (-$${cost})`);
+  save(); renderAll();
+}
+function doService(busId){
+  const bus=byId(state.buses,busId); if(!bus) return;
+  const cost=serviceCost(bus);
+  if(state.wallet<cost) return alert("Not enough budget.");
+  state.wallet -= cost;
+  bus.serviceBoost = Math.min(30, Number(bus.serviceBoost||0)+10);
+  bus.condition = Math.min(100, Number(bus.condition||70)+10);
+  log(`🧽 Service: ${bus.name} (-$${cost})`);
+  save(); renderAll();
+}
+function doUpgrade(busId){
+  const bus=byId(state.buses,busId); if(!bus) return;
+  const cost=upgradeCost(bus);
+  if(state.wallet<cost) return alert("Not enough budget.");
+  state.wallet -= cost;
+  bus.reliabilityMod = Math.min(0.25, Number(bus.reliabilityMod||0)+0.05);
+  bus.condition = Math.min(100, Number(bus.condition||70)+8);
+  log(`🧩 Upgrade: ${bus.name} (-$${cost})`);
+  save(); renderAll();
+}
+
+/* ========= lot + year ========= */
+function msrpFor(year, trim){
+  const base=98000 + (year-2018)*1800;
+  const add = trim==="HDX"?11000 : trim==="C2"?7000 : 0;
+  return Math.round(base+add);
+}
+function makeLotBus(year){
+  const trim=pick(["EFX","C2","HDX"]);
+  const model = trim==="EFX"?"Saf-T-Liner EFX":trim==="C2"?"Saf-T-Liner C2":"Saf-T-Liner HDX";
+  const fun=["Yellow Thunder","Route Rocket","Kindergarten Cruiser","Field Trip King","Honk Machine","Pothole Warrior","Sunrise Express","After-School Shuttle"];
+  const condition=randInt(92,100);
+  const price = msrpFor(year,trim) - (100-condition)*350;
+  return { lotId:uid(), make:"Thomas Built Buses", model, year, name:`New ${year} ${trim} • ${pick(fun)}`, price:Math.round(price), condition, warranty:randInt(2,5) };
+}
+function generateLotForYear(year){
+  const list=[];
+  for(let i=0;i<6;i++) list.push(makeLotBus(year));
+  if(Math.random()<0.6){
+    const leftovers=randInt(1,2);
+    for(let i=0;i<leftovers;i++){
+      const b=makeLotBus(year-1);
+      b.name = `Leftover ${b.year} Deal • ${b.name.split("•").slice(-1)[0].trim()}`;
+      b.price = Math.round(b.price*0.90);
+      list.push(b);
+    }
+  }
+  state.lotInventory=list;
+}
+function refreshLot(){ generateLotForYear(state.gameYear); save(); renderAll(); }
+function buyLotBus(lotId){
+  const item=state.lotInventory.find(x=>x.lotId===lotId);
+  if(!item) return;
+  if(state.wallet<item.price) return alert("Not enough budget.");
+  state.wallet -= item.price;
+  state.buses.push({
+    id:uid(),
+    name:item.name,
+    notes:`${item.make} • ${item.model} • Warranty ${item.warranty}yr`,
+    status:"active",
+    maintenanceNote:"",
+    subBusId:null,
+    inServiceYear:item.year,
+    odometer:0,
+    condition:item.condition,
+    reliabilityMod:0.05,
+    serviceBoost:10,
+    lastPreTripDate:null,
+    lastPostTripDate:null,
+    preTripStreak:0,
+    defect:null
+  });
+  state.lotInventory = state.lotInventory.filter(x=>x.lotId!==lotId);
+  log(`🚌 Purchased: ${item.name} (-$${item.price.toLocaleString()})`);
+  save(); renderAll();
+}
+function advanceYear(){
+  state.gameYear += 1;
+  // new lot each year
+  generateLotForYear(state.gameYear);
+  // retirement checks
+  maybeRetireDrivers();
+  // small budget allocation
+  const allocation = 2500;
+  state.wallet += allocation;
+  log(`📅 Advanced to ${state.gameYear}. Allocation +$${allocation}`);
+  save(); renderAll();
+}
+
+/* ========= hiring ========= */
+function openHiringPool(){
+  const first=["Pat","Casey","Jordan","Taylor","Morgan","Riley","Avery","Sam","Cameron","Drew","Jamie","Alex"];
+  const last=["Johnson","Miller","Davis","Clark","Lopez","Nguyen","Patel","Baker","Reed","Santos","Price","Hall"];
+  function genName(){ return `${pick(first)} ${pick(last)}`; }
+  function candidate(){
+    const exp=randInt(0,18);
+    const trait=pick(TRAITS);
+    const hiredYear=state.gameYear-exp;
+    const cost=Math.max(120, Math.round(200 + exp*25 + (trait.id==="safe"?80:0) + (trait.id==="rough"?-40:0)));
+    return { candId:uid(), name:genName(), hiredYear, trait, cost };
+  }
+  state._hiringPool=[candidate(),candidate(),candidate()];
+  renderAll();
+}
+function hireCandidate(candId){
+  const c=(state._hiringPool||[]).find(x=>x.candId===candId);
+  if(!c) return;
+  if(state.wallet<c.cost) return alert("Not enough budget.");
+  state.wallet -= c.cost;
+  state.drivers.push({ id:uid(), name:c.name, hiredYear:c.hiredYear, trait:c.trait, status:"available", isRetired:false, retiredYear:null });
+  state._hiringPool=null;
+  log(`👩‍✈️ Hired: ${c.name} (-$${c.cost})`);
+  save(); renderAll();
+}
+
+/* ========= utility: logging + backup/restore/reset ========= */
+function log(note, busId=""){
+  state.logs.unshift({ id:uid(), date:dispatchKey(), busId, note, createdAt:Date.now() });
+  state.logs = state.logs.slice(0,200);
+}
+function backupData(){
+  const json = JSON.stringify(state, null, 2);
+  prompt("Copy this backup JSON:", json);
+}
+function restoreData(){
+  const json = prompt("Paste backup JSON:");
+  if(!json) return;
+  try{
+    const obj = JSON.parse(json);
+    localStorage.setItem(KEY, JSON.stringify(obj));
+    location.reload();
+  }catch(e){
+    alert("Invalid JSON.");
+  }
+}
+function resetAll(){
+  if(!confirm("Reset everything?")) return;
+  localStorage.removeItem(KEY);
+  location.reload();
+}
+
+/* ========= rendering ========= */
+function renderAll(){
+  normalize();
+  ensureDispatchDay();
+
+  document.getElementById("walletTop").textContent = `$${Math.round(state.wallet).toLocaleString()}`;
+  document.getElementById("walletGarage").textContent = `$${Math.round(state.wallet).toLocaleString()}`;
+  document.getElementById("gameDateTop").textContent = state.gameDate;
+  document.getElementById("gameYearTop").textContent = state.gameYear;
+  document.getElementById("dispatchDate").textContent = dispatchKey();
+  document.getElementById("prMeter").textContent = Math.round(state.ops.prScore || 0);
+  document.getElementById("opsBanner").textContent = opsBannerText(dispatchKey());
+  document.getElementById("lotYear").textContent = state.gameYear;
+
+  renderSelects();
+  renderRouteAssignments();
+  renderDispatchPanel();
+  renderCustomRoutes();
+  renderFleet();
+  renderGarage();
+  renderLot();
+  renderDrivers();
+  renderLog();
+}
+function renderSelects(){
+  // buses
+  const busOpts = state.buses.map(b=>`<option value="${b.id}">${b.name} ${b.status==="down"?"(DOWN)":""}</option>`).join("");
+  document.getElementById("checkBus").innerHTML = busOpts || `<option value="">(no buses)</option>`;
+  document.getElementById("routeBus").innerHTML = busOpts || `<option value="">(no buses)</option>`;
+
+  // drivers
+  const driverOpts = state.drivers
+    .filter(d=>!d.isRetired)
+    .map(d=>{
+      const yrs = driverExp(d);
+      const late = state.ops.lateDrivers.includes(d.id) ? " • LATE" : "";
+      return `<option value="${d.id}">${d.name} (${yrs}y • ${d.trait?.name || "Trait"}${late}) [${d.status}]</option>`;
+    }).join("");
+  document.getElementById("routeDriver").innerHTML = driverOpts || `<option value="">(no drivers)</option>`;
+
+  // ad-hoc routes only
+  const adhocOpts = adhocRoutes().map(r=>`<option value="${r.id}">${r.name} (${r.miles}mi • +$${r.pay})</option>`).join("");
+  document.getElementById("routeType").innerHTML = adhocOpts || `<option value="">(no ad-hoc routes)</option>`;
+}
+function renderRouteAssignments(){
+  const panel=document.getElementById("routeAssignmentsPanel");
+  if(!dailyRoutes().length){
+    panel.innerHTML = `<div class="muted">No daily routes.</div>`;
+    return;
+  }
+  const busOptions = (selectedId)=> {
+    const base = `<option value="">(unassigned)</option>`;
+    const opts = state.buses.map(b=>`<option value="${b.id}" ${b.id===selectedId?"selected":""}>${b.name} ${b.status==="down"?"(DOWN)":""}</option>`).join("");
+    return base+opts;
+  };
+
+  panel.innerHTML = `
+    <table>
+      <thead><tr><th>Route</th><th>Assigned Bus</th></tr></thead>
+      <tbody>
+        ${dailyRoutes().map(r=>{
+          const assigned = state.routeAssignments[r.id] || "";
+          return `
+            <tr>
+              <td>
+                <strong>${r.name}</strong>
+                <div class="small muted">${r.miles} mi • +$${r.pay} • Wear x${r.wear} • Risk x${r.risk}</div>
+              </td>
+              <td style="min-width:260px">
+                <select onchange="setAssignedBus('${r.id}', this.value)">
+                  ${busOptions(assigned)}
+                </select>
+              </td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+function renderDispatchPanel(){
+  const panel=document.getElementById("dispatchPanel");
+  const shift=getShift();
+  const dKey=dispatchKey();
+
+  if(!dailyRoutes().length){
+    panel.innerHTML = `<div class="muted">No daily routes.</div>`;
+    return;
+  }
+
+  const driverSelect = (routeId, selectedId)=>{
+    const opts = [
+      `<option value="">(no driver)</option>`,
+      ...state.drivers.filter(d=>!d.isRetired).map(d=>{
+        const yrs=driverExp(d);
+        const late=state.ops.lateDrivers.includes(d.id) ? " • LATE" : "";
+        return `<option value="${d.id}" ${d.id===selectedId?"selected":""}>${d.name} (${yrs}y • ${d.trait?.name||"Trait"}${late}) [${d.status}]</option>`;
+      })
+    ].join("");
+    return `<select onchange="setDispatchDriver('${routeId}', this.value)">${opts}</select>`;
+  };
+
+  panel.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Route (${shift.toUpperCase()})</th>
+          <th>Driver</th>
+          <th class="right">Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${dailyRoutes().map(r=>{
+          const assignedBusId = state.routeAssignments[r.id] || "";
+          const bus = assignedBusId ? byId(state.buses, assignedBusId) : null;
+          const busTag = !bus ? `<span class="tag">NO BUS</span>` : bus.status==="down" ? `<span class="tag">BUS DOWN</span>` : `<span class="tag">OK</span>`;
+          const preTripOk = bus && bus.lastPreTripDate===dKey ? `<span class="tag">PRE ✅</span>` : bus ? `<span class="tag">PRE ❌</span>` : "";
+          const drvId = getDispatchDriver(r.id);
+
+          return `
+            <tr>
+              <td>
+                <strong>${r.name}</strong>
+                <div class="small muted">${busTag}${preTripOk} ${r.miles} mi • +$${r.pay}</div>
+              </td>
+              <td style="min-width:260px">${driverSelect(r.id, drvId)}</td>
+              <td class="right nowrap">
+                <button class="primary" onclick="runScheduledRoute('${r.id}')">Run</button>
+              </td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+function renderCustomRoutes(){
+  const panel=document.getElementById("customRoutesPanel");
+  const list=state.customRoutes||[];
+  if(!list.length){
+    panel.innerHTML=`<div class="muted">No custom routes yet.</div>`;
+    return;
+  }
+  panel.innerHTML=`
+    <table>
+      <thead><tr><th>Custom Route</th><th>Type</th><th class="right">Action</th></tr></thead>
+      <tbody>
+        ${list.map(r=>`
+          <tr>
+            <td>
+              <strong>${r.name}</strong>
+              <div class="small muted">${r.miles} mi • +$${r.pay} • Wear x${r.wear} • Risk x${r.risk}</div>
+            </td>
+            <td>${r.isAdhoc ? "Ad-hoc" : "Daily"}</td>
+            <td class="right nowrap"><button class="danger" onclick="deleteCustomRoute('${r.id}')">Delete</button></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+function renderFleet(){
+  const panel=document.getElementById("fleetPanel");
+  if(!state.buses.length){
+    panel.innerHTML=`<div class="muted">No buses yet. Add one or buy from the lot.</div>`;
+    return;
+  }
+  panel.innerHTML=`
+    <table>
+      <thead><tr><th>Bus</th><th>Status</th><th class="right">Stats</th></tr></thead>
+      <tbody>
+        ${state.buses.map(b=>{
+          const age=busAge(b);
+          const defect=b.defect ? `${b.defect.level.toUpperCase()}: ${b.defect.note}` : "None";
+          return `
+            <tr>
+              <td>
+                <strong>${b.name}</strong>
+                <div class="small muted">In service: ${b.inServiceYear} (Age ${age}) • Notes: ${b.notes||"—"}</div>
+                <div class="small muted">Defect: ${defect}</div>
+              </td>
+              <td>
+                <span class="tag">${b.status.toUpperCase()}</span>
+                ${b.maintenanceNote ? `<div class="small muted">${b.maintenanceNote}</div>` : ""}
+              </td>
+              <td class="right">
+                <div class="mono">${Math.round(b.odometer).toLocaleString()} mi</div>
+                <div class="small muted">Condition: ${Math.round(b.condition||0)}/100</div>
+              </td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+function renderGarage(){
+  const panel=document.getElementById("garagePanel");
+  if(!state.buses.length){
+    panel.innerHTML=`<div class="muted">Add a bus to use the garage.</div>`;
+    return;
+  }
+  panel.innerHTML=`
+    <table>
+      <thead><tr><th>Bus</th><th>Actions</th><th class="right">Costs</th></tr></thead>
+      <tbody>
+        ${state.buses.map(b=>{
+          const rc=repairCost(b), sc=serviceCost(b), uc=upgradeCost(b);
+          return `
+            <tr>
+              <td>
+                <strong>${b.name}</strong>
+                <div class="small muted">Status: ${b.status.toUpperCase()} • Condition ${Math.round(b.condition)}/100</div>
+              </td>
+              <td class="nowrap">
+                <button onclick="doRepair('${b.id}')">Repair</button>
+                <button onclick="doService('${b.id}')">Service</button>
+                <button onclick="doUpgrade('${b.id}')">Upgrade</button>
+              </td>
+              <td class="right">
+                <div class="small muted">Repair: $${rc.toLocaleString()}</div>
+                <div class="small muted">Service: $${sc.toLocaleString()}</div>
+                <div class="small muted">Upgrade: $${uc.toLocaleString()}</div>
+              </td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+function renderLot(){
+  const panel=document.getElementById("busLotPanel");
+  if(!state.lotInventory.length){
+    panel.innerHTML=`<div class="muted">Lot is empty. Refresh it.</div>`;
+    return;
+  }
+  panel.innerHTML=`
+    <table>
+      <thead><tr><th>Bus</th><th class="right">Price</th><th class="right">Buy</th></tr></thead>
+      <tbody>
+        ${state.lotInventory.map(x=>`
+          <tr>
+            <td>
+              <strong>${x.name}</strong>
+              <div class="small muted">${x.make} • ${x.model} • Warranty ${x.warranty}yr • Condition ${x.condition}/100</div>
+            </td>
+            <td class="right"><span class="mono">$${x.price.toLocaleString()}</span></td>
+            <td class="right"><button class="primary" onclick="buyLotBus('${x.lotId}')">Buy</button></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+function renderDrivers(){
+  const panel=document.getElementById("driversPanel");
+  if(!state.drivers.length){
+    panel.innerHTML=`<div class="muted">No drivers yet. Add one or hire from the pool.</div>`;
+  } else {
+    panel.innerHTML=`
+      <table>
+        <thead><tr><th>Driver</th><th>Status</th><th class="right">Actions</th></tr></thead>
+        <tbody>
+          ${state.drivers.map(d=>{
+            const yrs=driverExp(d);
+            const retired = d.isRetired ? `<span class="tag">RETIRED</span>` : "";
+            const late = state.ops.lateDrivers.includes(d.id) ? `<span class="tag">LATE</span>` : "";
+            const calloff = state.ops.absentDrivers.includes(d.id) ? `<span class="tag">CALLED OFF</span>` : "";
+            return `
+              <tr>
+                <td>
+                  <strong>${d.name}</strong>
+                  <div class="small muted">Experience: ${yrs}y • Trait: ${d.trait?.name||"Trait"} ${retired}</div>
+                </td>
+                <td>
+                  <span class="tag">${(d.status||"available").toUpperCase()}</span>
+                  ${late} ${calloff}
+                </td>
+                <td class="right nowrap">
+                  ${d.isRetired ? `<span class="muted small">—</span>` : `
+                    <select onchange="setDriverStatus('${d.id}', this.value)">
+                      <option value="available" ${d.status==="available"?"selected":""}>available</option>
+                      <option value="vacation" ${d.status==="vacation"?"selected":""}>vacation</option>
+                      <option value="sick" ${d.status==="sick"?"selected":""}>sick</option>
+                    </select>
+                  `}
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  const hiring=document.getElementById("hiringPanel");
+  const pool=state._hiringPool || [];
+  if(!pool.length){
+    hiring.innerHTML = `<div class="muted small">Open Hiring Pool to choose 1 of 3 candidates.</div>`;
+    return;
+  }
+  hiring.innerHTML = `
+    <div class="card" style="margin-top:10px;">
+      <div class="split">
+        <strong>🎤 Hiring Pool (Pick 1)</strong>
+        <button class="danger" onclick="state._hiringPool=null; renderAll()">Close</button>
+      </div>
+      <div class="hr"></div>
+      <table>
+        <thead><tr><th>Candidate</th><th class="right">Cost</th><th class="right">Hire</th></tr></thead>
+        <tbody>
+          ${pool.map(c=>`
+            <tr>
+              <td>
+                <strong>${c.name}</strong>
+                <div class="small muted">Trait: ${c.trait.name} • Start Year: ${c.hiredYear} • Experience: ${Math.max(0,state.gameYear-c.hiredYear)}y</div>
+              </td>
+              <td class="right"><span class="mono">$${c.cost.toLocaleString()}</span></td>
+              <td class="right"><button class="primary" onclick="hireCandidate('${c.candId}')">Hire</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function renderLog(){
+  const panel=document.getElementById("logPanel");
+  if(!state.logs.length){
+    panel.innerHTML = `<div class="muted">No activity yet.</div>`;
+    return;
+  }
+  panel.innerHTML = `
+    <table>
+      <thead><tr><th>When</th><th>Event</th></tr></thead>
+      <tbody>
+        ${state.logs.slice(0,25).map(l=>`
+          <tr>
+            <td class="mono nowrap">${l.date || ""}</td>
+            <td>${l.note}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+/* ========= init ========= */
+renderAll();
+</script>
+</body>
+</html>
