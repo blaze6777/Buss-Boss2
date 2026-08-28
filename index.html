@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>School Transportation Tycoon — Tycoon App V9.0</title>
+<title>School Transportation Tycoon — Tycoon App V9.2</title>
 <style>
 :root{
   --bg:#eef2f5;--panel:#fff;--ink:#183042;--muted:#6d7f8c;--line:#d8e0e5;
@@ -184,7 +184,7 @@ button,.btn,select,input{touch-action:manipulation}
 <body>
 <div class="app">
   <div class="topbar">
-    <div><h1>School Transportation Tycoon — Tycoon App V9.0</h1><div class="sub" id="clockText">Monday • August 24 • 5:35 AM • School Year 1</div></div>
+    <div><h1>School Transportation Tycoon — Tycoon App V9.2</h1><div class="sub" id="clockText">Monday • August 24 • 5:35 AM • School Year 1</div></div>
     <div class="chips">
       <div class="chip">Budget <b id="budget">$462,500</b></div>
       <div class="chip">🚌 <b id="busCount">9</b> buses</div>
@@ -543,6 +543,7 @@ button,.btn,select,input{touch-action:manipulation}
         <div class="small">ASSIGNMENT TOOLS</div>
         <h2 style="margin-top:4px">Fleet & Staffing Pool</h2>
         <div id="assignmentSummary" class="detail"></div>
+        <div id="assignmentReadiness" style="margin-top:12px"></div>
         <div class="actions"><button class="btn" onclick="clearTemporaryAssignments()">Clear Temporary Assignments</button></div>
       </aside>
     </div>
@@ -565,7 +566,7 @@ button,.btn,select,input{touch-action:manipulation}
 <section id="training" class="view">
     <div class="section-head">
       <div><h2>Driver Training & Compliance</h2><div class="small">Manage CDL, endorsements, annual refreshers, student management, evacuation drills, and retraining.</div></div>
-      <button class="btn" onclick="scheduleGroupTraining()">Schedule Group Training</button>
+      <div class="actions"><button class="btn" onclick="scheduleGroupTraining()">Schedule Group Training</button><button class="btn" onclick="openScheduledTraining()">Scheduled Training</button></div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -894,7 +895,7 @@ function openInteractiveBoardMeeting(){let topic=departmentVacancies().length>2?
 function boardAnswer(type){let bonus=type==='data'?2:type==='safety'?2:1;state.board=Math.min(100,state.board+bonus);state.reputation=Math.min(100,state.reputation+1);state.news.unshift({text:`Transportation Director presented ${type} case to the school board.`,tone:'good'});closeModal();render()}
 function openWinterRoadCheck(){let reports=['North rural roads are slick with drifting.','Main roads are wet but passable.','Visibility is reduced near the lake.'];openModal('4:30 AM Winter Road Check',`<div class="alert">❄️ ${state.weather.condition} • ${state.weather.temp}°F • ${state.weather.roads}</div>${reports.map((r,i)=>`<div class="kv"><span>Road Check Driver ${i+1}</span><b>${r}</b></div>`).join('')}<div class="actions"><button class="btn" onclick="weatherDecision('Normal')">Normal</button><button class="btn" onclick="weatherDecision('2-Hour Delay')">2-Hour Delay</button><button class="btn" onclick="weatherDecision('Close')">Close</button></div>`)}
 function advanceV8Systems(){
- progressDriverAcademy();progressRepairQueue();progressConstruction();
+ progressDriverAcademy();progressRepairQueue();progressConstruction();processScheduledTraining();
  state.roadEvents.forEach(e=>e.days--);state.roadEvents=state.roadEvents.filter(e=>e.days>0);
  state.partsOrders.forEach(o=>o.days--);
  if(Math.random()<.08)generateRoadEvent();
@@ -1113,7 +1114,15 @@ function render(){
  ensureRealCalendar();
  $('budget').textContent=money(state.budget);$('busCount').textContent=state.buses.length;$('driverCount').textContent=state.staff.length;$('boardScore').textContent=state.board;
  $('clockText').textContent=formatGameDate()+' • '+minsToTime(state.simMinutes||315)+' • School Year '+state.year;
- renderBuses();renderAlerts();renderRoutes();renderApplicants();renderStaff();renderTrips();renderFleet();renderDispatch();renderReports();renderLog();renderInbox();renderFacilities();renderHistory();if(typeof renderDepartment==='function')renderDepartment();renderDistrictV8();renderPeopleV8();renderShopV8();renderBoardV8();renderTycoon();
+ renderBuses();renderAlerts();renderRoutes();renderApplicants();renderStaff();renderTrips();renderFleet();renderDispatch();renderReports();renderLog();renderInbox();renderFacilities();renderHistory();
+ if(typeof renderAssignments==='function')renderAssignments();
+ if(typeof renderTraining==='function')renderTraining();
+ if(typeof renderOperations==='function')renderOperations();
+ if(typeof renderToday==='function')renderToday();
+ if(typeof renderCalendarUX==='function')renderCalendarUX();
+ if(typeof renderStudents==='function')renderStudents();
+ if(typeof renderDepartment==='function')renderDepartment();
+ renderDistrictV8();renderPeopleV8();renderShopV8();renderBoardV8();renderTycoon();
 }
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(b.dataset.view).classList.add('active')});
 function busParkedToday(b){
@@ -1426,7 +1435,7 @@ function ensureAssignmentFields(){
 }
 function renderAssignments(){
  if(!$('assignmentBody'))return; ensureAssignmentFields();
- const driverOptions=state.staff.map(s=>`<option value="${s.name}">${s.name} — ${s.years} yr${s.years===1?'':'s'}${s.status==='Substitute'?' (Sub)':''}</option>`).join('');
+ const driverOptions=state.staff.filter(s=>s.status!=='Former').map(s=>`<option value="${s.name}">${s.name} — ${s.years} yr${s.years===1?'':'s'}${s.status==='Substitute'?' (Sub)':''}</option>`).join('');
  const busOptions=state.buses.map(b=>`<option value="${b.id}">Bus ${b.id} — ${b.year} • ${b.designation}</option>`).join('');
  $('assignmentBody').innerHTML=state.routes.map(r=>`
    <tr>
@@ -1438,7 +1447,7 @@ function renderAssignments(){
        <button class="btn" style="padding:6px 9px;margin-left:4px" onclick="applyDriverSelection(${r.id})">Apply</button>
      </td>
      <td><select onchange="assignBusToRoute(${r.id},Number(this.value))" style="min-width:150px">
-       <option value="">Unassigned</option>${state.buses.map(b=>`<option value="${b.id}" ${r.bus===b.id?'selected':''}>Bus ${b.id} — ${b.year}</option>`).join('')}
+       <option value="">Unassigned</option>${state.buses.map(b=>`<option value="${b.id}" ${r.bus===b.id?'selected':''}>Bus ${b.id} — ${b.year}${r.specialNeeds&&!b.wheelchairLift?' ⚠ no lift':''}</option>`).join('')}
      </select></td>
      <td>${(()=>{let b=state.buses.find(x=>x.id===r.bus);return b?`<select onchange="setBusDesignation(${b.id},this.value)">${['Regular Route','Spare','Trip Bus','Special Ed','Maintenance Reserve'].map(d=>`<option ${b.designation===d?'selected':''}>${d}</option>`).join('')}</select>`:'—'})()}</td>
      <td><select onchange="setTemporaryBus(${r.id},this.value)" style="min-width:150px">
@@ -1456,6 +1465,10 @@ function renderAssignments(){
    <div class="kv"><span>Trip buses</span><b>${state.buses.filter(b=>b.designation==='Trip Bus').length}</b></div>
    <div class="kv"><span>Special Ed buses</span><b>${state.buses.filter(b=>b.designation==='Special Ed').length}</b></div>
    <div class="kv"><span>Substitute drivers</span><b>${state.staff.filter(s=>s.status==='Substitute').length}</b></div>`;
+ const missingDriver=state.routes.filter(r=>!r.driver),missingBus=state.routes.filter(r=>!r.bus);
+ if($('assignmentReadiness'))$('assignmentReadiness').innerHTML=(missingDriver.length||missingBus.length)
+   ?`<div class="alert"><b>Opening Day Readiness</b><div class="small">${missingDriver.length} route(s) need a permanent driver • ${missingBus.length} route(s) need a permanent bus.</div></div>`
+   :`<div class="alert priority-green"><b>✅ Opening Day Ready</b><div class="small">Every route has a permanent driver and bus assignment.</div></div>`;
 }
 
 function applyDriverSelection(routeId){
@@ -1467,7 +1480,7 @@ function setTemporaryDriver(routeId,name){
  let r=state.routes.find(x=>x.id===routeId); if(!r)return;
  r.temporaryDriver=name||null;
  log(`Route ${routeId} temporary driver ${name?'set to '+name+' until the regular driver returns':'cleared'}.`);
- render();
+ autosaveGame();render();
 }
 
 function assignDriverToRoute(routeId,name){
@@ -1495,12 +1508,19 @@ function assignDriverToRoute(routeId,name){
  let b=state.buses.find(x=>x.id===r.bus);
  if(b)b.driver=r.driver;
  log(`Route ${routeId} driver assignment changed to ${name||'unassigned'}.`);
- render();
+ autosaveGame();render();
 }
 function assignBusToRoute(routeId,busId){
  let r=state.routes.find(x=>x.id===routeId);
  if(!r)return alert('Route not found.');
  busId=busId?Number(busId):null;
+ if(busId && r.specialNeeds){
+   let candidate=state.buses.find(x=>x.id===busId);
+   if(candidate && !candidate.wheelchairLift){
+     alert(`Route ${routeId} is a special-needs route and requires a lift-equipped bus.`);
+     render();return;
+   }
+ }
 
  // A new permanent assignment replaces any old temporary bus override.
  r.temporaryBus=null;
@@ -1554,7 +1574,7 @@ function clearRouteBusOverride(routeId){
  log(`Route ${routeId} temporary bus override cleared. Permanent Bus ${r.bus||'—'} will receive route mileage.`);
  autosaveGame();render();
 }
-function clearTemporaryAssignments(){state.routes.forEach(r=>{r.temporaryBus=null;r.temporaryDriver=null});log('All temporary route assignments cleared.');render()}
+function clearTemporaryAssignments(){state.routes.forEach(r=>{r.temporaryBus=null;r.temporaryDriver=null});log('All temporary route assignments cleared.');autosaveGame();render()}
 function autoAssignYear(){
  ensureAssignmentFields();
  const regularBuses=state.buses.filter(b=>b.designation==='Regular Route'||b.designation==='Spare');
@@ -1563,7 +1583,7 @@ function autoAssignYear(){
    if(regularBuses[i])assignBusToRouteSilent(r.id,regularBuses[i].id);
    if(regularDrivers[i])assignDriverSilent(r.id,regularDrivers[i].name);
  });
- log('Summer assignment board auto-filled.');render()
+ log('Summer assignment board auto-filled.');autosaveGame();render()
 }
 function assignBusToRouteSilent(routeId,busId){
  let r=state.routes.find(x=>x.id===routeId),b=state.buses.find(x=>x.id===busId);if(!r||!b)return;
@@ -1585,12 +1605,13 @@ function finalizeAssignments(){
  state.assignmentHistory=state.assignmentHistory||[];
  state.assignmentHistory.push({year:state.year,routes:state.routes.map(r=>({route:r.id,bus:r.bus,driver:r.driver}))});
  state.staff.forEach(s=>{if(s.status==='Called Off')s.status=s.route?'Regular':'Substitute'});
- log(`School Year ${state.year} driver and bus assignments finalized.`);
+ autosaveGame();log(`School Year ${state.year} driver and bus assignments finalized.`);
  openModal('Assignments Finalized',`Your regular route lineup has been locked in for School Year ${state.year}. Temporary substitute buses can still be used during daily operations.`);render()
 }
 
 
 function ensureTrainingData(){
+ state.scheduledTraining=state.scheduledTraining||[];
  state.staff.forEach((s,i)=>{
    if(!s.training){
      s.training={
@@ -1636,7 +1657,8 @@ function renderTraining(){
      if(v==='Due Soon'||v==='Needs Training'||v==='Needs Endorsement'||v==='Recommended') due.push(`${s.name}: ${labelTraining(k)} — ${v}`);
    });
  });
- $('complianceList').innerHTML=due.length?due.map(x=>`<div class="alert">⚠ ${x}</div>`).join(''):'<div class="alert">✅ All driver training and compliance items are current.</div>';
+ let scheduled=(state.scheduledTraining||[]).map(x=>`<div class="alert priority-green">📅 <b>${x.courseName}</b><div class="small">${x.driverNames.length} drivers • ${x.when}${x.dueDate?' • '+formatGameDate(x.dueDate):''}</div></div>`).join('');
+ $('complianceList').innerHTML=(scheduled||'')+(due.length?due.map(x=>`<div class="alert">⚠ ${x}</div>`).join(''):'<div class="alert">✅ All driver training and compliance items are current.</div>');
 }
 function labelTraining(k){
  return {cdl:'CDL',schoolBus:'P/S Endorsement',annualSafety:'Annual Safety',evacuation:'Evacuation Drill',studentMgmt:'Student Management',physical:'DOT Physical'}[k]||k;
@@ -1649,15 +1671,19 @@ function openDriverTraining(index){
    </div>`)
 }
 function enrollDriverTraining(index,courseId){
+ ensureTrainingData();syncBudgets();
  let s=state.staff[index],c=trainingCourses.find(x=>x.id===courseId);
  if(!s||!c)return;
- if(state.budget<c.cost)return alert('Not enough training budget.');
- state.budget-=c.cost;
+ if(state.operatingBudget<c.cost)return alert('Not enough operating funds for this training.');
+ snapshotAction('Driver training');
+ state.operatingBudget-=c.cost;syncBudgets();
  s.training[c.field]=c.result;
- if(courseId==='endorsement' && !s.cdl.includes('P/S')) s.cdl='Class B + P/S';
+ if(courseId==='endorsement' && !(s.cdl||'').includes('P/S')) s.cdl='Class B + P/S';
  if(courseId==='cdl' && s.cdl==='Permit only') s.cdl='Class B';
+ s.history=s.history||[];
+ s.history.push({year:state.year,date:state.gameDate,event:`Completed ${c.name}`});
  log(`${s.name} completed ${c.name}. Cost ${money(c.cost)}.`);
- closeModal();render();
+ autosaveGame();closeModal();render();
 }
 function scheduleGroupTraining(){
  ensureTrainingData();
@@ -1680,7 +1706,7 @@ function scheduleGroupTraining(){
    </select>
    <div id="groupTrainingSummary" class="detail" style="margin-top:12px"></div>
    <div class="actions">
-     <button class="btn primary" onclick="confirmGroupTraining()">Schedule & Complete</button>
+     <button class="btn primary" onclick="confirmGroupTraining()">Schedule Training</button>
      <button class="btn" onclick="closeModal()">Cancel</button>
    </div>
  `);
@@ -1697,35 +1723,79 @@ function updateGroupTrainingCost(){
    <div class="kv"><span>Training</span><b>${c.name}</b></div>
    <div class="kv"><span>Drivers included</span><b>${eligible.length}</b></div>
    <div class="kv"><span>Cost per driver</span><b>${money(c.cost)}</b></div>
-   <div class="kv"><span>Total cost</span><b>${money(cost)}</b></div>`;
+   <div class="kv"><span>Total operating cost</span><b>${money(cost)}</b></div>`;
+}
+function addSchoolDaysToISO(iso,count){
+ let d=parseGameDate(iso),added=0;
+ while(added<count){d.setUTCDate(d.getUTCDate()+1);let wd=d.getUTCDay();if(wd!==0&&wd!==6)added++}
+ return isoDateUTC(d);
+}
+function completeScheduledTraining(item){
+ ensureTrainingData();
+ let c=trainingCourses.find(x=>x.id===item.courseId);if(!c)return;
+ let drivers=item.driverNames.map(n=>state.staff.find(s=>s.name===n)).filter(Boolean);
+ drivers.forEach(s=>{
+   s.training[c.field]=c.result;
+   if(c.id==='endorsement' && !(s.cdl||'').includes('P/S'))s.cdl='Class B + P/S';
+   if(c.id==='cdl' && s.cdl==='Permit only')s.cdl='Class B';
+   s.history=s.history||[];
+   s.history.push({year:state.year,date:state.gameDate,event:`Completed group ${c.name}`});
+ });
+ state.news.unshift({text:`Transportation completed ${c.name} for ${drivers.length} drivers.`,tone:'good'});
+ log(`Scheduled group training completed: ${c.name} for ${drivers.length} drivers.`);
+ notify(`${c.name} completed for ${drivers.length} drivers.`,'decision');
+}
+function processScheduledTraining(){
+ ensureTrainingData();
+ let due=[],keep=[];
+ state.scheduledTraining.forEach(item=>{
+   let ready=item.when==='Summer Planning'
+     ? state.season==='Summer'
+     : item.dueDate && state.gameDate>=item.dueDate;
+   if(ready)due.push(item);else keep.push(item);
+ });
+ due.forEach(completeScheduledTraining);
+ state.scheduledTraining=keep;
 }
 function confirmGroupTraining(){
- ensureTrainingData();
- let eligible=state.staff.filter(s=>s.employmentStatus!=='Retired'&&s.employmentStatus!=='Resigned');
+ ensureTrainingData();syncBudgets();
+ let eligible=state.staff.filter(s=>s.status!=='Former'&&s.employmentStatus!=='Retired'&&s.employmentStatus!=='Resigned');
  let courseId=$('groupTrainingCourse')?$('groupTrainingCourse').value:'safety';
  let c=trainingCourses.find(x=>x.id===courseId);
  if(!c)return alert('Select a training course.');
  let cost=eligible.length*c.cost;
- if(state.budget<cost)return alert(`Not enough budget. Group training requires ${money(cost)}.`);
+ if(state.operatingBudget<cost)return alert(`Not enough operating funds. Group training requires ${money(cost)}.`);
  let when=$('groupTrainingWhen')?$('groupTrainingWhen').value:'Today';
  snapshotAction('Group training');
- state.budget-=cost;
- eligible.forEach(s=>{
-   s.training[c.field]=c.result;
-   s.history=s.history||[];
-   s.history.push({year:state.year,event:`Completed group ${c.name} (${when})`});
- });
- state.calendar=state.calendar||[];
- state.calendar.push({date:`Day ${state.day+1}`,item:`Group Driver Training — ${c.name} (${when})`});
- state.news=state.news||[];
- state.news.unshift({text:`Transportation completed ${c.name} for ${eligible.length} drivers.`,tone:'good'});
- log(`Group training completed: ${c.name} for ${eligible.length} drivers. Cost ${money(cost)}.`);
- closeModal();
- autosaveGame();
- render();
- alert(`${c.name} completed for ${eligible.length} drivers.`);
+ state.operatingBudget-=cost;syncBudgets();
+ let item={id:Date.now(),courseId,courseName:c.name,when,cost,driverNames:eligible.map(s=>s.name),createdDate:state.gameDate,dueDate:null};
+ if(when==='Today'){
+   completeScheduledTraining(item);
+ }else{
+   if(when==='Tomorrow')item.dueDate=addSchoolDaysToISO(state.gameDate,1);
+   if(when==='Next In-Service Day')item.dueDate=addSchoolDaysToISO(state.gameDate,5);
+   state.scheduledTraining.push(item);
+   state.calendar=state.calendar||[];
+   state.calendar.push({date:item.dueDate||'Summer Planning',item:`Group Driver Training — ${c.name}`});
+   log(`Group training scheduled: ${c.name} for ${eligible.length} drivers (${when}). Cost ${money(cost)}.`);
+   notify(`${c.name} scheduled for ${when}.`,'decision');
+ }
+ closeModal();autosaveGame();render();
 }
 
+
+function openScheduledTraining(){
+ ensureTrainingData();
+ let rows=state.scheduledTraining.length?state.scheduledTraining.map((x,i)=>`<div class="alert"><b>${x.courseName}</b><div class="small">${x.driverNames.length} drivers • ${x.when}${x.dueDate?' • '+formatGameDate(x.dueDate):''} • ${money(x.cost)} already committed</div><div class="actions"><button class="btn" onclick="cancelScheduledTraining(${i})">Cancel & Refund</button></div></div>`).join(''):'<div class="alert priority-green">No future training is scheduled.</div>';
+ openModal('Scheduled Driver Training',rows);
+}
+function cancelScheduledTraining(i){
+ ensureTrainingData();syncBudgets();let x=state.scheduledTraining[i];if(!x)return;
+ state.operatingBudget+=x.cost;syncBudgets();
+ state.scheduledTraining.splice(i,1);
+ log(`Canceled ${x.courseName}; ${money(x.cost)} returned to operating funds.`);
+ autosaveGame();closeModal();render();
+}
 function ensureV4Data(){
  ensureAssignmentFields(); ensureTrainingData();
  if(state.simMinutes==null)state.simMinutes=315;

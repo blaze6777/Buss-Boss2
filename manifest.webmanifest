@@ -1,7 +1,7 @@
 {
-  "name": "School Transportation Tycoon \u2014 App V9.0",
+  "name": "School Transportation Tycoon \u2014 App V9.2",
   "short_name": "Transport Tycoon",
-  "description": "Build and run a school transportation department over decades with district growth, budgets, construction, fleet, HR, operations and strategy.",
+  "description": "School transportation tycoon and department management simulator.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
